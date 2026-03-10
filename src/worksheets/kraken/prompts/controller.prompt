@@ -19,9 +19,7 @@ Here are some guidelines:
 
 Possible actions are:
 - get_tables_schema(question): Retrieves all the tables and their columns in the SQL database.
-- get_examples(question): Returns relevant examples of SQL queries based on the question.
 - execute_sql(sql): Runs a SQL query and returns a truncated result set for brevity.
-- get_feedback_on_result(sql): Gives expert feedback the SQL query result.
 - stop(): Marks the last executed SQL query as the final answer and ends the process.
 
 The SQL query contains two User Defined Functions (UDFs) that you can use when writing SQL query:
@@ -41,21 +39,10 @@ Think and perform the next action.
 
 # input
 Conversation History:
-{% if conversation_history %}
-{% for i in range(0, conversation_history|length) %}
-Question: {{ conversation_history[i].user }}
-SQL: {{ conversation_history[i].final_sql }}
-Results: {{ conversation_history[i].results }}
-Response: {{ conversation_history[i].response }}
-{% endfor %}
-{% endif %}
+{{ conversation_history_text }}
 
 New Question: {{ question }}
 
-{% if action_history %}
-{% for i in range(0, action_history|length) %}
-{{ action_history[i] }}
-{% endfor %}
-{% endif %}
+{{ action_history_text }}
 
 Output one "Thought" and one "Action":

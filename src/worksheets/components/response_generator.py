@@ -66,9 +66,13 @@ class ResponsePromptManager:
         """
         current_date = datetime.datetime.now()
         turns = dlg_history[-self.agent.config.rg_num_turns :]
+        dlg_history_lines = []
+        for turn in turns:
+            dlg_history_lines.append(f"*User:* {turn.user_utterance}")
+            dlg_history_lines.append(f"*Agent:* {turn.system_response}")
 
         return {
-            "dlg_history": turns,
+            "dlg_history_text": "\n".join(dlg_history_lines),
             "date": current_date.strftime("%Y-%m-%d"),
             "day": current_date.strftime("%A"),
             "state": get_context_schema(self.runtime.context, response_generator=True),

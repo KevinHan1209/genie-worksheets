@@ -28,9 +28,14 @@ async def json_to_string(j: dict) -> str:
 
 @chain
 async def json_to_action(action_dict: dict) -> ParserAction:
-    thought = action_dict["thought"]
-    action_name = action_dict["action_name"]
-    action_argument = action_dict["action_argument"]
+    if isinstance(action_dict, Action):
+        thought = action_dict.thought
+        action_name = action_dict.action_name
+        action_argument = action_dict.action_argument
+    else:
+        thought = action_dict["thought"]
+        action_name = action_dict["action_name"]
+        action_argument = action_dict["action_argument"]
 
     if action_name == "execute_sql":
         assert action_argument, action_dict
@@ -116,7 +121,11 @@ class KrakenParser(BaseParser):
         cls.controller_prompt_template = load_fewshot_prompt_template(
             "controller.prompt"
         )
-        cls.controller_chain = cls.controller_prompt_template | cls.llm_client.with_structured_output(Action)
+        cls.controller_chain = (
+            cls.controller_prompt_template
+            | cls.llm_client.with_structured_output(Action)
+            | json_to_action
+        )
 
         cls.sql_chain = sql_string_to_sql_object | execute_sql_object.bind(
             table_w_ids=table_w_ids,
@@ -199,11 +208,33 @@ class KrakenParser(BaseParser):
                 include_observation = False
             action_history.append(a.to_jinja_string(include_observation))
 
+        conversation_history_lines = []
+        for turn in state.get("conversation_history") or []:
+            if isinstance(turn, dict):
+                user_utterance = turn.get("user_utterance", "")
+                user_target = turn.get("user_target", "")
+                db_results = turn.get("db_results", "")
+                agent_utterance = turn.get("agent_utterance", "")
+            else:
+                user_utterance = getattr(turn, "user_utterance", "")
+                user_target = getattr(turn, "user_target", "")
+                db_results = getattr(turn, "db_results", "")
+                agent_utterance = getattr(turn, "agent_utterance", "")
+
+            conversation_history_lines.append(
+                (
+                    f"Question: {user_utterance}\n"
+                    f"SQL: {user_target}\n"
+                    f"Results: {db_results}\n"
+                    f"Response: {agent_utterance}"
+                )
+            )
+
         action = await KrakenParser.controller_chain.ainvoke(
             {
                 "question": state["question"],
-                "action_history": action_history,
-                "conversation_history": state["conversation_history"],
+                "action_history_text": "\n".join(action_history),
+                "conversation_history_text": "\n\n".join(conversation_history_lines),
                 "instructions": state["domain_instructions"],
             }
         )

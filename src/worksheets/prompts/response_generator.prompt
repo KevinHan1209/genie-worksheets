@@ -257,7 +257,4 @@ main = Main()
 ```
 
 **Transcript so far**
-{% for turn in dlg_history %}
-*User:* {{ turn.user_utterance }}
-*Agent:* {{ turn.system_response }}
-{% endfor %}
+{{ dlg_history_text }}

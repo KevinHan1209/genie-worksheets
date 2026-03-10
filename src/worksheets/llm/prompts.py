@@ -202,7 +202,7 @@ def load_fewshot_prompt_template(
     return chat_prompt_template
 
 
-def init_llm(prompt_dir: str, dotenv_path: str, override_env: bool = True):
+def init_llm(prompt_dir: str | list[str], dotenv_path: str, override_env: bool = True):
     initialize_jinja_environment(prompt_dir)
 
     load_dotenv(

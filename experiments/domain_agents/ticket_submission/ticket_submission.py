@@ -5,8 +5,9 @@ from uuid import uuid4
 from suql.agent import postprocess_suql
 
 from worksheets.agent.agent import Agent
-from worksheets.interface_utils import conversation_loop
-from worksheets.knowledge.parser import SUQLKnowledgeBase, SUQLParser
+from worksheets.knowledge.base import SUQLKnowledgeBase
+from worksheets.knowledge.parser import SUQLParser
+from worksheets.utils.interface import conversation_loop
 
 
 # Define your APIs
@@ -88,7 +89,7 @@ prompt_dir = os.path.join(current_dir, "prompts")
 
 # Define Knowledge Base
 suql_knowledge = SUQLKnowledgeBase(
-    llm_model_name="azure/gpt-4o",
+    llm_model_name="gpt-4o",
     tables_with_primary_keys={},
     database_name="services_assistant",
     embedding_server_address="http://127.0.0.1:8509",
@@ -97,8 +98,6 @@ suql_knowledge = SUQLKnowledgeBase(
     },
     postprocessing_fn=postprocess_suql,
     result_postprocessing_fn=None,
-    api_base="https://ovaloairesourceworksheet.openai.azure.com/",
-    api_version="2024-08-01-preview",
 )
 
 # Define the SUQL Parser

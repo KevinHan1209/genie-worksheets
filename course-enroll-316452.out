@@ -1,0 +1,3 @@
+==> ROOT_DIR=/users/kevin-han/genie-worksheets
+==> Checking PostgreSQL at 127.0.0.1:5432
+==> Starting dockerized PostgreSQL

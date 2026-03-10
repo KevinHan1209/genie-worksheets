@@ -9,9 +9,10 @@ from loguru import logger
 from suql.agent import postprocess_suql
 
 from worksheets.agent.agent import Agent
-from worksheets.interface_utils import conversation_loop
-from worksheets.knowledge.parser import SUQLKnowledgeBase, SUQLParser
-from worksheets.llm_utils import num_tokens_from_string
+from worksheets.knowledge.base import SUQLKnowledgeBase
+from worksheets.knowledge.parser import SUQLParser
+from worksheets.utils.interface import conversation_loop
+from worksheets.utils.llm import num_tokens_from_string
 
 # Define your APIs
 
@@ -154,7 +155,7 @@ def clean_up_response_restaurant(
 
 
 suql_knowledge = SUQLKnowledgeBase(
-    llm_model_name="azure/gpt-4o",
+    llm_model_name="gpt-4o",
     tables_with_primary_keys={"restaurants": "_id"},
     database_name="restaurants",
     embedding_server_address="http://127.0.0.1:8509",
@@ -163,8 +164,6 @@ suql_knowledge = SUQLKnowledgeBase(
     },
     postprocessing_fn=postprocess_suql,
     result_postprocessing_fn=clean_up_response_restaurant,
-    api_base="https://ovaloairesourceworksheet.openai.azure.com/",
-    api_version="2024-08-01-preview",
 )
 
 # Define the SUQL React Parser

@@ -26,12 +26,6 @@ handler_1 = FileCallbackHandler(logfile)
 handler_2 = StdOutCallbackHandler()
 
 
-oval_config_params = {
-    "api_key": os.getenv("AZURE_OPENAI_WS_KEY"),
-    "azure_endpoint": "https://ovaloairesourceworksheet.openai.azure.com/",
-    "api_version": "2023-12-01-preview",
-}
-
 current_dir = os.path.dirname(os.path.realpath(__file__))
 
 prompt_dir = os.path.join(
@@ -39,11 +33,6 @@ prompt_dir = os.path.join(
 )
 
 model_name = "gpt-4-turbo"
-
-# model = AzureChatOpenAI(
-#     azure_deployment=model_name,
-#     **oval_config_params,
-# )
 
 model = ChatOpenAI(model=model_name)
 

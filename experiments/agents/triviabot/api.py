@@ -66,7 +66,7 @@ def check_user_answer(question_number: int, answer: str):
             "user_response": answer,
         },
         prompt_dir,
-        model_name="azure/gpt-4o",
+        model_name="gpt-4o",
         max_tokens=100,
         temperature=0.0,
     )

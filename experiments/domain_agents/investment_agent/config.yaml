@@ -4,14 +4,14 @@ prompt_log_path: "logs/investment_agent_prompts.log"
 conversation_log_path: "logs/investment_agent_conversation.json"
 
 semantic_parser:
-    model_name: "azure/gpt-4.1"
+    model_name: "gpt-4.1"
 
 response_generator:
-    model_name: "azure/gpt-4.1"
+    model_name: "gpt-4.1"
 
 knowledge_parser:
-    model_name: "azure/gpt-4.1"
+    model_name: "gpt-4.1"
 
 knowledge_base:
-    model_name: "azure/gpt-4.1"
+    model_name: "gpt-4.1"
 

@@ -154,8 +154,6 @@ class ParserAction:
     possible_actions = [
         "get_tables_schema",
         "execute_sql",
-        "get_examples",
-        "get_feedback_on_result",
         "stop",
     ]
 

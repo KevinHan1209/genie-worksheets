@@ -7,9 +7,8 @@ import yaml
 from loguru import logger
 
 from worksheets.agent.agent import Agent
-from worksheets.agent.chainlit import generate_next_turn_cl
-from worksheets.annotation_utils import get_agent_action_schemas, get_context_schema
-from worksheets.components import CurrentDialogueTurn
+from worksheets.core.dialogue import CurrentDialogueTurn
+from worksheets.utils.annotation import get_agent_action_schemas, get_context_schema
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(current_dir, "..", ".."))
@@ -94,7 +93,7 @@ async def initialize():
 @cl.on_message
 async def get_user_message(message):
     bot = cl.user_session.get("bot")
-    await generate_next_turn_cl(message.content, bot)
+    await bot.generate_next_turn(message.content)
 
     cl.user_session.set("bot", bot)
 

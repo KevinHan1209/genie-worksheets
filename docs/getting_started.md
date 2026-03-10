@@ -125,21 +125,21 @@ config = Config.load_from_yaml(os.path.join(current_dir, "config.yaml"))
 You can also define the configuration programmatically:
 
 ```python
-from worksheets import Config, AzureModelConfig
+from worksheets import Config, OpenAIModelConfig
 import os
 
 config = Config(
-    semantic_parser=AzureModelConfig(
-        model_name="azure/gpt-4o",
-    ),
-    response_generator=AzureModelConfig(
-        model_name="azure/gpt-4o",
-    ),
-    knowledge_parser=AzureModelConfig(
+    semantic_parser=OpenAIModelConfig(
         model_name="gpt-4o",
     ),
-    knowledge_base=AzureModelConfig(
-        model_name="azure/gpt-4o",
+    response_generator=OpenAIModelConfig(
+        model_name="gpt-4o",
+    ),
+    knowledge_parser=OpenAIModelConfig(
+        model_name="gpt-4o",
+    ),
+    knowledge_base=OpenAIModelConfig(
+        model_name="gpt-4o",
     ),
 )
 ```

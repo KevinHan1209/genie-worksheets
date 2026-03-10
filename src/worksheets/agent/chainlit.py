@@ -1,3 +1,5 @@
+import json
+
 import chainlit as cl
 
 from worksheets.agent.agent import Agent
@@ -7,6 +9,17 @@ from worksheets.utils.annotation import get_agent_action_schemas, get_context_sc
 
 
 class ChainlitAgent(Agent):
+    @staticmethod
+    def _safe_step_text(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str, indent=2)
+        except Exception:
+            return str(value)
+
     async def generate_next_turn(self, user_utterance: str):
         """Generate the next turn in the dialogue based on the user's utterance for chainlit frontend.
 
@@ -33,10 +46,11 @@ class ChainlitAgent(Agent):
             language="python",
             show_input=True,
         ) as step:
+            step.input = self._safe_step_text(user_utterance)
             current_dlg_turn.context = GenieContext()
             current_dlg_turn.global_context = GenieContext()
             await self.genie_parser.parse(current_dlg_turn, self.dlg_history)
-            step.output = current_dlg_turn.user_target_sp
+            step.output = self._safe_step_text(current_dlg_turn.user_target_sp)
 
         # run the agent policy
         async with cl.Step(
@@ -48,8 +62,8 @@ class ChainlitAgent(Agent):
             await cl.make_async(self.genie_agent_policy_manager.run_policy)(
                 current_dlg_turn
             )
-            step.input = current_dlg_turn.user_target
-            step.output = get_context_schema(self.runtime.context)
+            step.input = self._safe_step_text(current_dlg_turn.user_target)
+            step.output = self._safe_step_text(get_context_schema(self.runtime.context))
 
         # generate a response based on the agent policy
         async with cl.Step(
@@ -58,11 +72,14 @@ class ChainlitAgent(Agent):
             language="json",
             show_input=True,
         ) as step:
+            step.input = self._safe_step_text(current_dlg_turn.user_target)
             await self.genie_response_generator.generate_response(
                 current_dlg_turn, self.dlg_history
             )
             # step.output = get_context_schema(self.runtime.context)
-            step.output = get_agent_action_schemas(
-                current_dlg_turn.system_action, self.runtime.context
+            step.output = self._safe_step_text(
+                get_agent_action_schemas(
+                    current_dlg_turn.system_action, self.runtime.context
+                )
             )
             self.dlg_history.append(current_dlg_turn)

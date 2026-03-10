@@ -9,7 +9,7 @@ _AGENT_API_REGISTRY = []
 
 
 class OpenAIModelConfig(BaseModel):
-    model_name: str = Field(default="azure/gpt-4.1-mini")
+    model_name: str = Field(default="gpt-4.1-mini")
     temperature: float = Field(default=0.0)
     max_tokens: int = Field(default=1024)
     top_p: float = Field(default=1.0)

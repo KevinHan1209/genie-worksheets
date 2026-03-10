@@ -577,7 +577,7 @@ async def validation_check(
     try:
         logger.debug(f"Generating LLM response with prompt: {prompt_path}")
         llm_client = get_llm_client(
-            model="azure/gpt-4.1-mini",
+            model="gpt-4.1-mini",
             temperature=0.0,
             max_tokens=1024,
         )

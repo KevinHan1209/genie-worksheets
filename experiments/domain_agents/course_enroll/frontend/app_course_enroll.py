@@ -14,9 +14,9 @@ from worksheets.core.dialogue import CurrentDialogueTurn
 from worksheets.core.worksheet import get_genie_fields_from_ws
 from worksheets.utils.annotation import get_agent_action_schemas, get_context_schema
 
-sys.path.append(
-    "/home/harshit/genie-worksheets/experiments/domain_agents/"
-)
+# Add local domain_agents root so `course_enroll.*` imports work on any machine.
+CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(CURRENT_DIR, "..", ".."))
 
 from course_enroll.course_enroll import agent_builder
 
@@ -49,14 +49,10 @@ def is_course_full(course_id, **kwargs):
 
 
 # Constants
-CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data", "user_conversation")
 LOGS_DIR = os.path.join(CURRENT_DIR, "..", "user_logs_courseenroll")
 LOGS_FILE = os.path.join(LOGS_DIR, "user_logs_230325.log")
 
-
-# Extend python path to include parent directories
-sys.path.append(os.path.join(CURRENT_DIR, "..", ".."))
 
 # Configure logger
 logger.remove()
@@ -197,6 +193,11 @@ async def get_user_message(message):
     cl.user_session.set("bot", agent)
     user_id = cl.user_session.get("id")
     response = agent.dlg_history[-1].system_response
+    # Guard against null/empty responses that can break frontend rendering.
+    if response is None:
+        response = "I couldn't generate a response. Please try again."
+    else:
+        response = str(response)
 
     ensure_user_dir_exists(user_id)
 
@@ -205,12 +206,23 @@ async def get_user_message(message):
         user_id, agent.dlg_history, "intermediate_conversation.json"
     )
 
-    # Send response with conversation log attachment
-    await cl.Message(
-        response,
-        author="Course Enrollment Assistant",
-        elements=[cl.File(name="conv_log.json", path=file_path)],
-    ).send()
+    # Send response with conversation log attachment when possible.
+    elements = []
+    if file_path and os.path.exists(file_path):
+        elements = [cl.File(name="conv_log.json", path=file_path)]
+
+    try:
+        await cl.Message(
+            response,
+            author="Course Enrollment Assistant",
+            elements=elements,
+        ).send()
+    except Exception:
+        # Fallback path: send plain text if attachment rendering fails in UI.
+        await cl.Message(
+            response,
+            author="Course Enrollment Assistant",
+        ).send()
 
 
 @cl.on_chat_end

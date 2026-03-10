@@ -166,7 +166,7 @@ class SUQLParser(BaseSUQLParser):
         `parsed_output` (str): a parsed SUQL output
         """
 
-        suql_dlg_history = self.convert_dlg_turn_to_suql_dlg_turn(
+        suql_dlg_history, _, _ = self.convert_dlg_turn_to_suql_dlg_turn(
             dlg_history, db_results
         )
 
@@ -267,7 +267,7 @@ class SUQLReActParser(BaseSUQLParser):
         runtime: GenieRuntime,
         db_results: List[str] | None = None,
     ):
-        suql_dlg_history = self.convert_dlg_turn_to_suql_dlg_turn(
+        suql_dlg_history, _, _ = self.convert_dlg_turn_to_suql_dlg_turn(
             dlg_history, db_results
         )
 
@@ -305,13 +305,20 @@ class SUQLReActParser(BaseSUQLParser):
     ):
         from worksheets.kraken.agent import KrakenParser
         parser = KrakenParser()
+        if self.knowledge.model_config.config_name == "azure":
+            suql_api_base = os.getenv("LLM_API_ENDPOINT")
+            suql_api_version = os.getenv("LLM_API_VERSION")
+        else:
+            suql_api_base = os.getenv("LLM_API_BASE_URL")
+            suql_api_version = None
+
         parser.initialize(
             engine=self.model_config.model_name,
             table_w_ids=table_w_ids,
             database_name=database_name,
             suql_model_name=self.knowledge.model_config.model_name,
-            suql_api_base=os.getenv("LLM_API_ENDPOINT"),
-            suql_api_version=os.getenv("LLM_API_VERSION"),
+            suql_api_base=suql_api_base,
+            suql_api_version=suql_api_version,
             suql_api_key=os.getenv("LLM_API_KEY"),
             embedding_server_address=embedding_server_address,
             db_host=self.knowledge.db_host,
