@@ -1,28 +1,3 @@
-<p align="center">
-    <h1 align="center">
-        <img src="assets/genie_worksheets_circle.png" width=100px>
-        <br>
-        <b>GenieWorksheets</b>
-        <br>
-        <a href="https://arxiv.org/abs/2407.05674">
-            <img src="https://img.shields.io/badge/cs.CL-2407.05674-b31b1b"
-            alt="arXiv">
-        </a>
-        <a href="https://ws.genie.stanford.edu/">
-            <img src="https://img.shields.io/badge/website-genie.stanford.edu-blue"
-            alt="Website">
-        </a>
-        <a href="https://ws.genie.stanford.edu/docs/">
-            <img src="https://img.shields.io/badge/docs-genie.stanford.edu-blue"
-            alt="Docs">
-        </a>
-    </h1>
-</p>
-<p align="center">
-    Framework for creating reliable conversational agents
-</p>
-
-
 Genie is a programmable framework for creating task-oriented conversational
 agents that are designed to handle complex user interactions and knowledge
 access. Unlike LLMs, Genie provides reliable grounded responses, with 
