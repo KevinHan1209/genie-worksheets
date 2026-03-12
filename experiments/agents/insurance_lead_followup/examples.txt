@@ -1,0 +1,182 @@
+{# Right person, confirms identity #}
+User: yes, this is James
+Target:
+lead_contact = LeadContact()
+lead_contact.is_right_person = True
+lead_contact.identity_confirmed = True
+main.lead_contact = lead_contact
+--
+{# Right person in sample-style phrasing #}
+User: yes, that's me
+Target:
+lead_contact = LeadContact()
+lead_contact.is_right_person = True
+lead_contact.identity_confirmed = True
+main.lead_contact = lead_contact
+--
+{# Wrong person #}
+User: no, James doesn't live here anymore
+Target:
+lead_contact = LeadContact()
+lead_contact.is_right_person = False
+lead_contact.wrong_person_notes = "James no longer lives here"
+main.lead_contact = lead_contact
+--
+{# Permission granted — also sets the gate field on main #}
+User: sure, go ahead
+Target:
+main.lead_contact.permission_to_continue = True
+main.verify_quote = VerifyQuote()
+--
+{# Permission denied, wants callback #}
+User: now's not a good time, can you call me back?
+Target:
+main.lead_contact.permission_to_continue = False
+main.lead_contact.callback_requested = True
+--
+{# Callback time #}
+User: call me back this afternoon
+Target:
+main.lead_contact.callback_time_text = "this afternoon"
+--
+{# Do not call #}
+User: please don't call me again
+Target:
+main.lead_contact.permission_to_continue = False
+main.lead_contact.callback_requested = False
+main.lead_contact.do_not_call = True
+--
+{# User asks what details are on file — retrieve from DB #}
+User: what details do you have on file?
+Target: SELECT q.property_address, q.property_type, q.coverage_start, l.target_name FROM insurance_quotes q JOIN insurance_leads l ON q.lead_id = l.lead_id WHERE l.lead_id = 1;
+--
+{# Retrieval wording variant during verify step #}
+User: well what do you have on file?
+Target: SELECT q.property_address, q.property_type, q.coverage_start, l.target_name FROM insurance_quotes q JOIN insurance_leads l ON q.lead_id = l.lead_id WHERE l.lead_id = 1;
+--
+{# User asks explicitly what address is on file — retrieve from DB #}
+User: what is the property address you have on file?
+Target: SELECT q.property_address FROM insurance_quotes q WHERE q.lead_id = 1;
+--
+{# Confirm address #}
+User: yes, that address is correct
+Target:
+verify_quote = VerifyQuote()
+verify_quote.property_address = "742 Evergreen Terrace, Springfield"
+main.verify_quote = verify_quote
+--
+{# Confirm address with short acknowledgement #}
+User: okay
+Target:
+main.verify_quote.property_address = "742 Evergreen Terrace, Springfield"
+--
+{# User asks to list details and verify — also retrieves from DB #}
+User: sure. could you list out the details and I'll verify?
+Target: SELECT q.property_address, q.property_type, q.coverage_start FROM insurance_quotes q WHERE q.lead_id = 1;
+--
+{# Clarification should not trigger corrected fields #}
+User: corrected? what do you mean corrected?
+Target: state_response("I only need a corrected address if the one on file is wrong. I can read what I have on file first: property address, property type, and desired coverage start date.")
+--
+{# Correct address #}
+User: the address is actually 548 Bradbury St
+Target:
+verify_quote = VerifyQuote()
+verify_quote.property_address = "548 Bradbury St"
+main.verify_quote = verify_quote
+--
+{# After correction, continue with normal next verify field #}
+User: yes, that property type is correct
+Target:
+main.verify_quote.property_type = "single-family home"
+--
+{# Confirm property type and coverage start #}
+User: yes the property type is right, and the start date is fine too
+Target:
+main.verify_quote.property_type = "single-family home"
+main.verify_quote.coverage_start = "April 15, 2025"
+--
+{# Correct coverage start date #}
+User: actually I'd like coverage to start June 1st
+Target:
+main.verify_quote.coverage_start = "June 1st"
+--
+{# Verification complete — also sets the gate field on main #}
+User: yes, everything looks good now
+Target:
+main.verify_quote.property_address = "742 Evergreen Terrace, Springfield"
+main.verify_quote.property_type = "single-family home"
+main.verify_quote.coverage_start = "April 15, 2025"
+main.underwriting_intake = UnderwritingIntake()
+--
+{# Roof age #}
+User: the roof is about 12 years old
+Target:
+underwriting_intake = UnderwritingIntake()
+underwriting_intake.roof_age_years = "12"
+main.underwriting_intake = underwriting_intake
+--
+{# Claims - one #}
+User: I've had one claim in the last five years
+Target:
+main.underwriting_intake.claims_past_five_years = "one"
+--
+{# Claims details #}
+User: it was a water damage claim, about $8,000
+Target:
+main.underwriting_intake.claims_details = "water damage claim, approximately $8,000"
+--
+{# Claims - none #}
+User: no, no claims at all
+Target:
+main.underwriting_intake.claims_past_five_years = "none"
+--
+{# Underwriting complete after confirmation — initializes consultation #}
+User: yes, that's correct
+Target:
+main.underwriting_intake.claims_past_five_years = confirm("none")
+main.schedule_consultation = ScheduleConsultation()
+--
+{# Interested in consultation #}
+User: yes I'd like to talk to someone about a policy
+Target:
+schedule_consultation = ScheduleConsultation()
+schedule_consultation.interested_in_consultation = True
+main.schedule_consultation = schedule_consultation
+--
+{# Not interested #}
+User: no thanks, I'll think about it
+Target:
+schedule_consultation = ScheduleConsultation()
+schedule_consultation.interested_in_consultation = False
+main.schedule_consultation = schedule_consultation
+--
+{# Time preference #}
+User: mornings work best
+Target:
+main.schedule_consultation.time_preference = "morning"
+--
+{# Select slot #}
+User: Thursday at two works best
+Target:
+main.schedule_consultation.selected_slot = "Thursday 2:00 PM with James Rivera"
+--
+{# Booking confirmed #}
+User: yes, book that one
+Target:
+main.schedule_consultation.booking_confirmed = True
+--
+{# Final review — no changes needed, wrap up #}
+User: no, that's everything
+Target:
+main.final_confirm = True
+--
+{# Final review — user wants to change something #}
+User: actually yes, I'd like to change the coverage start date
+Target:
+main.final_confirm = False
+--
+{# General question about the insurance process #}
+User: what is the process for getting a homeowners policy?
+Target: answer(insurance_general_info, "what is the process for getting a homeowners insurance policy?")
+--

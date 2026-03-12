@@ -31,9 +31,61 @@ Worksheet. In contrast to dialog trees, it is resilient to diverse user queries,
 helpful with knowledge sources, and offers ease of programming policies through
  its declarative paradigm.
 
-[Research Preprint](https://arxiv.org/abs/2407.05674): To be presented at ACL 2025
+## Fork Origin
 
-<img src="assets/banner.jpg">
+This repository is forked from the Stanford OVAL GenieWorksheets project:
+`https://github.com/stanford-oval/genie-worksheets`.
+
+## Insurance Lead Agent
+
+This repository is currently focused on one end-to-end worksheet-based agent:
+`experiments/agents/insurance_lead_followup`.
+
+### Purpose
+
+The `insurance_lead_followup` agent runs an outbound follow-up flow for home
+insurance leads. It is designed to:
+
+- confirm the caller reached the correct contact,
+- verify quote details already on file,
+- collect underwriting qualification fields,
+- offer and book a consultation with a licensed agent,
+- finalize and persist the call outcome.
+
+### Worksheet Flow
+
+The implementation is organized around a top-level worksheet (`Main`) and four
+sub-worksheets in sequence:
+
+1. `LeadContact`
+   - Confirms right person and identity.
+   - Captures whether the person gives permission to continue.
+   - Handles early exits (`wrong person`, `callback`, `do_not_call`).
+2. `VerifyQuote`
+   - Verifies canonical quote fields:
+     - `property_address`
+     - `property_type`
+     - `coverage_start`
+   - These are confirmation-required fields.
+3. `UnderwritingIntake`
+   - Captures:
+     - `roof_age_years`
+     - `claims_past_five_years`
+     - conditional `claims_details`
+   - Computes/records underwriting disposition metadata.
+4. `ScheduleConsultation`
+   - Captures consultation interest, time preference, selected slot, and booking confirmation.
+5. `Main.final_confirm`
+   - Asks for last edits, then finalizes the call record.
+
+### Files to Know
+
+- Worksheet definitions: `experiments/agents/insurance_lead_followup/worksheets.py`
+- Runtime builder (worksheet runtime): `experiments/agents/insurance_lead_followup/worksheet_agent_builder.py`
+- API + DB sync logic: `experiments/agents/insurance_lead_followup/api.py`
+- Local setup guide: `experiments/agents/insurance_lead_followup/local_setup/README.md`
+- Chainlit app: `experiments/agents/insurance_lead_followup/frontend/app_insurance.py`
+
 
 ## Installation
 
@@ -41,8 +93,8 @@ To install Genie, we recommend using uv ([UV installation guide](https://github.
 
 
 ```bash
-git clone https://github.com/stanford-oval/genie-worksheets.git
-cd worksheets
+git clone https://github.com/KevinHan1209/genie-worksheets.git
+cd genie-worksheets
 uv venv
 source venv/bin/activate
 uv sync
@@ -86,7 +138,6 @@ config = Config(
     knowledge_base=OpenAIModelConfig(
         model_name="gpt-4o",
     ),
-    prompt_dir=prompt_dir,
 )
 ```
 
@@ -94,28 +145,19 @@ config = Config(
 
 ```python
 from worksheets.agent.config import agent_api
-from worksheets.core.worksheet import get_genie_fields_from_ws
-from uuid import uuid4
 
-@agent_api("course_detail_to_individual_params", "Get course details")
-def course_detail_to_individual_params(course_detail):
-    if course_detail.value is None:
-        return {}
-    course_detail = course_detail.value
-    course_detail = {}
-    for field in get_genie_fields_from_ws(course_detail):
-        course_detail[field.name] = field.value
-
-    return course_detail
-
-@agent_api("courses_to_take_oval", "Final API to enroll into a course")
-def courses_to_take_oval(**kwargs):
-    return {"success": True, "transaction_id": uuid4()}
-
-@agent_api("is_course_full", "Check if a course is full")
-def is_course_full(course_id, **kwargs):
+@agent_api("check_availability", "Get consultation slots")
+def check_availability(day_preference=None):
     # Implementation here
-    return False
+    return [
+        "Thursday 2:00 PM with James Rivera",
+        "Friday 10:00 AM with Monica Chen",
+    ]
+
+@agent_api("book_appointment", "Book a consultation slot")
+def book_appointment(selected_slot, **kwargs):
+    # Implementation here
+    return {"success": True, "selected_slot": selected_slot}
 ```
 
 ### Define your starting prompt
@@ -133,10 +175,8 @@ starting_prompt = TemplateLoader.load(
 Or define it inline:
 
 ```python
-starting_prompt = """Hello! I'm the Course Enrollment Assistant. I can help you with:
-- Selecting a course: just say find me programming courses
-- Enrolling into a course. 
-- Asking me any question related to courses and their requirement criteria.
+starting_prompt = """Hello, this is an automated assistant calling on behalf of Prestige Home Insurance.
+I can help verify quote details, collect underwriting information, and schedule a consultation with a licensed agent.
 
 How can I help you today?"""
 ```
@@ -148,29 +188,30 @@ from worksheets import AgentBuilder, SUQLKnowledgeBase, SUQLReActParser
 
 agent = (
     AgentBuilder(
-        name="Course Enrollment Assistant",
-        description="You are a course enrollment assistant. You can help students with course selection and enrollment.",
+        name="InsuranceLeadBot",
+        description="You are an outbound follow-up assistant for Prestige Home Insurance.",
         starting_prompt=starting_prompt.render() if hasattr(starting_prompt, 'render') else starting_prompt,
     )
     .with_knowledge_base(
         SUQLKnowledgeBase,
         tables_with_primary_keys={
-            "courses": "course_id",
-            "ratings": "rating_id",
-            "offerings": "course_id",
-            "programs": "program_id",
+            "insurance_leads": "lead_id",
+            "insurance_quotes": "quote_id",
+            "insurance_underwriting": "underwriting_id",
+            "insurance_appointments": "appointment_id",
+            "insurance_call_log": "call_id",
         },
-        database_name="course_assistant",
+        database_name="insurance",
         embedding_server_address="http://127.0.0.1:8509",
         source_file_mapping={
-            "course_assistant_general_info.txt": os.path.join(
-                current_dir, "course_assistant_general_info.txt"
+            "insurance_general_info.txt": os.path.join(
+                current_dir, "insurance_general_info.txt"
             )
         },
-        postprocessing_fn=postprocess_suql,
-        result_postprocessing_fn=None,
         db_username="select_user",
         db_password="select_user",
+        db_host="127.0.0.1",
+        db_port="5432",
     )
     .with_parser(
         SUQLReActParser,
@@ -192,11 +233,11 @@ import os
 
 agent = (
     AgentBuilder(
-        name="Course Enrollment Assistant",
-        description="You are a course enrollment assistant. You can help students with course selection and enrollment.",
+        name="InsuranceLeadBot",
+        description="You are an outbound follow-up assistant for Prestige Home Insurance.",
         starting_prompt=starting_prompt.render() if hasattr(starting_prompt, 'render') else starting_prompt,
     )
-    .with_csv_specification(os.path.join(current_dir, "course_enrollment.csv"))
+    .with_csv_specification(os.path.join(current_dir, "insurance_lead_spec.csv"))
     .build(config)
 )
 ```
@@ -210,16 +251,16 @@ import os
 
 agent = (
     AgentBuilder(
-        name="Course Enrollment Assistant",
-        description="You are a course enrollment assistant. You can help students with course selection and enrollment.",
+        name="InsuranceLeadBot",
+        description="You are an outbound follow-up assistant for Prestige Home Insurance.",
         starting_prompt=starting_prompt.render() if hasattr(starting_prompt, 'render') else starting_prompt,
     )
-    .with_json_specification(os.path.join(current_dir, "course_enrollment.json"))
+    .with_json_specification(os.path.join(current_dir, "your_agent_spec.json"))
     .build(config)
 )
 ```
 
-A sample JSON file is present in `experiments/domain_agents/course_enroll/course_enrollment.json`.
+A sample JSON spec is present in `experiments/agents/insurance_lead_followup/insurance_lead_spec.json`.
 
 ### Run the conversation loop
 
@@ -235,16 +276,16 @@ if __name__ == "__main__":
 
 ### Add prompts
 For each agent you need to create prompts for:
-- Semantic parsing: `semantic_parsing.prompt`
+- Semantic parsing: `semantic_parser_stateful.prompt`
 - Response generation: `response_generator.prompt`
 
 Place these prompts in the prompt directory that you specify while creating the
 agent.
 
 You can copy basic annotated prompts from `experiments/sample_prompts/` 
-directory. Make change where we have `TODO`. You need two provide a few 
+directory. Make changes where we have `TODO`. You need to provide a few
 guidelines in the prompt that will help the LLM to perform better and some 
-examples. Please `experiments/domain_agents/course_enroll/prompts/` for inspiration!
+examples. Please see `experiments/agents/insurance_lead_followup/prompts/` for inspiration!
 
 
 ### Spreadsheet Specification
@@ -253,11 +294,11 @@ To create a new agent, you should have a Google Service Account and create a new
 You can follow the instructions [here](https://cloud.google.com/iam/docs/service-account-overview) to create a Google Service Account.
 Share the created spreadsheet with the service account email.
 
-You should save the service_account key as `service_account.json` in the `worksheets/` directory.
+You should save the service account key as `service_account.json` in the repository root.
 
 Here is a starter worksheet that you can use for your reference: [Starter Worksheet](https://docs.google.com/spreadsheets/d/1ST1ixBogjEEzEhMeb-kVyf-JxGRMjtlRR6z4G2sjyb4/edit?usp=sharing)
 
-Here is a sample spreadsheet for a restaurant agent: [Restaurant Agent](https://docs.google.com/spreadsheets/d/1FXg5VFrdxQlUyld3QmKKL9BN1lLIhAtQTJjCHyNOU_Y/edit?usp=sharing)
+Here is a sample spreadsheet for an insurance lead follow-up agent: [Insurance Lead Follow-up Agent](https://docs.google.com/spreadsheets/d/1FXg5VFrdxQlUyld3QmKKL9BN1lLIhAtQTJjCHyNOU_Y/edit?usp=sharing)
 
 Please note that we only use the specification defined in the first sheet of the spreadsheet.
 
@@ -272,23 +313,8 @@ You can run the agent in a web interface by running:
 
 **NOTE:** You should run the agent in the `frontend` directory to preserve the frontend assets.
 
-For restaurant agent:
+For insurance lead follow-up agent:
 ```bash
-cd experiments/domain_agents/yelpbot/frontend/
-chainlit run app_restaurant.py --port 8800
+cd experiments/agents/insurance_lead_followup/frontend/
+chainlit run app_insurance.py --port 8801
 ```
-
-## Cite our work
-
-If you use Genie in your research or applications, please cite our work:
-
-```
-@article{genieworksheets,
-  title={Coding Reliable LLM-based Integrated Task and Knowledge Agents with GenieWorksheets},
-  author={Joshi, Harshit and Liu, Shicheng and Chen, James and Weigle, Robert and Lam, Monica S},
-  journal={arXiv preprint arXiv:2407.05674},
-  year={2024}
-}
-```
-
-GenieWorksheets logo is designed with the help of DALL-E.

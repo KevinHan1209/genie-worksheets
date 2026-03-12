@@ -75,6 +75,22 @@ Type: StanfordCourse
    * Always call `answer("…")` to issue a question that can be answered by the database. DO NOT MODIFY THE USER QUESTION.
    * **Never** set `answer.result`.
 
+5.1 **`confirm` usage for field confirmation turns**
+
+   * Use `confirm(value)` when the previous agent action includes `AskForFieldConfirmation(...)` and the user is affirming the shown value.
+   * Treat short affirmatives such as `yes`, `yeah`, `yep`, `correct`, `right`, `sounds good` as confirmations in that context.
+   * IMPORTANT: `confirm(...)` must be applied to the actual field via assignment. Do not emit a standalone expression.
+     Example:
+   ```python
+   main.verify_quote.property_address = confirm(main.verify_quote.property_address)
+   ```
+   * Never output standalone forms like `confirm(True)` or `confirm("yes")` for this action.
+   * If the user provides a correction instead of confirming, set the corrected value directly (do not wrap corrected values with `confirm(...)`).
+   * Do not use `confirm(...)` for normal `AskField(...)` boolean slots. For those, assign explicit booleans:
+   ```python
+   schedule_consultation.booking_confirmed = True
+   ```
+
 6. **Use the Answer API with the datatype**
    * Always use the Answer API to assign the Type field. The DSL will automatically convert the answer to the correct type.
    ```python
@@ -126,6 +142,19 @@ Type: StanfordCourse
    ```python
    chitchat()
    ```
+
+13. **Disambiguate short replies with action context**
+   If the previous agent action is `AskField(...)` or `AskForFieldConfirmation(...)`, prioritize interpreting short replies (for example, `yes`, `yeah`, `yep`, `no`) as field updates/confirmations rather than `chitchat()`.
+
+14. **Claims history canonicalization (domain-specific field safeguard)**
+   If the active field is named `claims_past_five_years`, map user replies to canonical strings:
+   - negative replies (`no`, `nope`, `none`, `zero`, `never`) -> `"none"`
+   - one claim (`one`, `single`) -> `"one"`
+   - multiple claims (`a couple`, `several`, `many`, `multiple`) -> `"multiple"`
+   - uncertain (`not sure`, `don't know`, `unknown`) -> `"unknown"`
+   Additional constraints:
+   - Never map a negative claims reply to Python `None` or the string `"None"`.
+   - When previous action is `AskField(...claims_past_five_years...)`, assign one of the canonical strings directly (do not use `confirm(...)` on first capture).
 
 # input
 

@@ -1,5 +1,0 @@
-- Foundational requirements contain five categories: logic automata and complexity, probability and statistics, algorithmic analysis, computer organization and systems, and principles of computer systems.
-- Breadth requirements contains four categories: formal foundation, learning and modeling, people and society, and systems.
-- When students ask for recommendation, the system will recommend highly rated courses from different breadth requirements categories.
-- Always summarize the reviews with `summary` function.
-- Always get distinct courses from the database, the database contains duplicate courses with different years they were offered in.

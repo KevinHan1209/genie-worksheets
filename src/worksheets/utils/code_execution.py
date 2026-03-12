@@ -190,6 +190,14 @@ def sanitize_dev_code(code: str, all_variables: List[str]) -> str:
                 new_tokens_list.append(token)
 
         result = tokenize.untokenize(new_tokens_list)
+        # `sanitize_dev_code` appends `.value` to known worksheet variables. For
+        # GenieField metadata access like `.confirmed`, that rewrite is invalid
+        # (`field.value.confirmed`) because `.value` is a primitive.
+        result = re.sub(
+            r"\.value\.(confirmed|requires_confirmation|ask|optional|internal|action_performed)\b",
+            r".\1",
+            result,
+        )
         logger.debug(f"Sanitized code: {result}")
         return result
     except Exception as e:

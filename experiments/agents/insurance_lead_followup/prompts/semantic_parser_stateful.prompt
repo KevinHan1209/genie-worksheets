@@ -1,0 +1,510 @@
+<|startofinstruction|>
+Your goal is to write python code statements using the given APIs and Databases based on the user utterance. Plan your response first, then generate the User Target.
+
+Today's date is {{ date }} and the day is {{ day }}.
+
+These are the APIs available to you:
+- Main(lead_contact: LeadContact, verify_quote: VerifyQuote, underwriting_intake: UnderwritingIntake, schedule_consultation: ScheduleConsultation, final_confirm: bool)
+- LeadContact(is_right_person: bool, identity_confirmed: bool, permission_to_continue: bool, callback_requested: bool, callback_time_text: Optional[str], do_not_call: bool, wrong_person_notes: Optional[str])
+- VerifyQuote(property_address: str, property_type: str, coverage_start: str)
+- UnderwritingIntake(roof_age_years: str, claims_past_five_years: str, claims_details: Optional[str], notes: Optional[str])
+- ScheduleConsultation(interested_in_consultation: bool, time_preference: Optional[str], selected_slot: str, booking_confirmed: bool)
+- answer(query: str)
+- confirm(value: Any)
+
+You should NEVER create a new variable on your own.
+For example: `answer = answer("What is on file?")` is not allowed.
+You should directly write `answer("What is on file?")`.
+
+You will be given:
+- The state of the conversation.
+- The agent's action.
+- The last turn of the conversation.
+
+Follow these guidelines:
+- The flow is sequential: LeadContact -> VerifyQuote -> UnderwritingIntake -> ScheduleConsultation.
+- If the person is not the right contact, or refuses to continue, the call ends early.
+- Map affirmative responses to True for boolean fields.
+- Map negative responses to False for boolean fields.
+- For claims_past_five_years, map "no claims" to "none", "one claim" to "one", "a couple" or "several" to "multiple".
+- For claims_past_five_years, map negative replies including "no", "nope", "none", "zero", "never" to the literal string "none" (NOT Python None and NOT the string "None").
+- For claims_past_five_years, map "one"/"single" to "one", "a couple"/"several"/"many" to "multiple", and "not sure"/"don't know" to "unknown".
+- For time_preference, map "morning" to "morning", "afternoon" to "afternoon", "anytime" to "no_preference".
+- When Agent Action has `AskForFieldConfirmation(...)`, treat affirmative replies (for example: "yes", "yeah", "yep", "correct", "sounds right") as confirmation of the current field value using `confirm(...)`.
+- When Agent Action has `AskForFieldConfirmation(...)` and the user provides a correction, set the corrected value directly (do not wrap corrected values with `confirm(...)`).
+- When Agent Action has `AskForFieldConfirmation(...)` and the user rejects the value without giving a replacement (for example: "no", "that's wrong"), clear only that field by setting it to `None` and do not modify sibling fields in that turn.
+- When Agent Action has `AskField(..., claims_past_five_years, ...)`, NEVER use `confirm(...)` for the user's first direct answer; assign one of "none" | "one" | "multiple" | "unknown" directly.
+- For `main.final_confirm`, NEVER use `confirm(...)`; always assign a boolean directly (`True` or `False`).
+- When the agent asks `final_confirm` ("any other details to add or change?") and the user says "no" / "nothing" / "that's everything", set `main.final_confirm = True`.
+- When the user says "yes" or names a change, set `main.final_confirm = False`.
+- Do not infer permission_to_continue from an initial identity confirmation alone.
+- When the agent asks the opening identity question ("Am I speaking with <name>?"), map "yes"/equivalent to:
+  - is_right_person = True
+  - identity_confirmed = True
+  and leave permission_to_continue unset.
+- Only set `permission_to_continue` when the prior Agent Action explicitly asks for that field.
+- When the user grants permission_to_continue=True, also initialize verify_quote in the same turn.
+- When property_address, property_type, and coverage_start are all confirmed, also initialize underwriting_intake in the same turn.
+- When underwriting intake required fields are confirmed, also initialize schedule_consultation in the same turn.
+  Specifically: roof_age_years confirmed, claims_past_five_years confirmed, and if claims_past_five_years is "one" or "multiple", claims_details confirmed.
+- Questions like "what do you have on file?" are retrieval questions — use SQL query, then continue with canonical fields.
+- For explicit corrections, set the matching canonical field directly.
+- Selecting a slot does not imply booking_confirmed. Only set booking_confirmed=True when user explicitly says to book it.
+- Use `answer(insurance_general_info, '...')` for general questions about the insurance domain.
+- If the user is chit-chatting, greeting or thanking, then just write: # Chit-chat, greeting or thanking.
+
+Here are some examples:
+{# Right person, confirms identity #}
+State: None
+Agent Action: None
+
+Last-turn Conversation:
+Agent: Hello, this is an automated assistant calling on behalf of Prestige Home Insurance. Am I speaking with Kevin?
+User: yes, that's me
+
+User Target:
+```
+lead_contact = LeadContact()
+lead_contact.is_right_person = True
+lead_contact.identity_confirmed = True
+main.lead_contact = lead_contact
+```
+--
+{# Wrong person #}
+State: None
+Agent Action: None
+
+Last-turn Conversation:
+Agent: Hello, this is an automated assistant calling on behalf of Prestige Home Insurance. Am I speaking with Kevin?
+User: no, Kevin doesn't live here anymore
+
+User Target:
+```
+lead_contact = LeadContact()
+lead_contact.is_right_person = False
+lead_contact.wrong_person_notes = "Kevin no longer lives here"
+main.lead_contact = lead_contact
+```
+--
+{# Permission granted — also initializes verify_quote #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True)
+main = Main(lead_contact=lead_contact)
+```
+Agent Action:
+[
+    AskAgentAct(lead_contact, permission_to_continue, ...)
+]
+
+Last-turn Conversation:
+Agent: I'm not a licensed insurance agent, but I would like to verify a few details from your quote and see if you'd like to schedule a call with a licensed agent. Do you have a few minutes?
+User: sure, go ahead
+
+User Target:
+```
+main.lead_contact.permission_to_continue = True
+main.verify_quote = VerifyQuote()
+```
+--
+{# Permission denied, wants callback #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True)
+main = Main(lead_contact=lead_contact)
+```
+Agent Action:
+[
+    AskAgentAct(lead_contact, permission_to_continue, ...)
+]
+
+Last-turn Conversation:
+Agent: Do you have a few minutes to review some quote details?
+User: now's not a good time, can you call me back?
+
+User Target:
+```
+main.lead_contact.permission_to_continue = False
+main.lead_contact.callback_requested = True
+```
+--
+{# Callback time #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True, permission_to_continue=False, callback_requested=True)
+main = Main(lead_contact=lead_contact)
+```
+Agent Action:
+[
+    AskAgentAct(lead_contact, callback_time_text, ...)
+]
+
+Last-turn Conversation:
+Agent: When would be a good time to call back?
+User: call me back this afternoon
+
+User Target:
+```
+main.lead_contact.callback_time_text = "this afternoon"
+```
+--
+{# Do not call #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True)
+main = Main(lead_contact=lead_contact)
+```
+Agent Action:
+[
+    AskAgentAct(lead_contact, permission_to_continue, ...)
+]
+
+Last-turn Conversation:
+Agent: Do you have a few minutes?
+User: please don't call me again
+
+User Target:
+```
+main.lead_contact.permission_to_continue = False
+main.lead_contact.callback_requested = False
+main.lead_contact.do_not_call = True
+```
+--
+{# User asks what details are on file — retrieve from DB #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True, permission_to_continue=True)
+verify_quote = VerifyQuote()
+main = Main(lead_contact=lead_contact, verify_quote=verify_quote)
+```
+Agent Action:
+[
+    AskAgentAct(verify_quote, property_address, ...)
+]
+
+Last-turn Conversation:
+Agent: Can I quickly verify the quote details I have on file?
+User: what details do you have on file?
+
+User Target:
+```
+answer("SELECT q.property_address, q.property_type, q.coverage_start, l.target_name FROM insurance_quotes q JOIN insurance_leads l ON q.lead_id = l.lead_id WHERE l.lead_id = 1;")
+```
+--
+{# Confirm address #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True, permission_to_continue=True)
+verify_quote = VerifyQuote()
+main = Main(lead_contact=lead_contact, verify_quote=verify_quote)
+```
+Agent Action:
+[
+    AskAgentAct(verify_quote, property_address, ...)
+]
+
+Last-turn Conversation:
+Agent: I have your property at 123 Oak Lane. Is that address correct?
+User: yes, that address is correct
+
+User Target:
+```
+main.verify_quote.property_address = "123 Oak Lane"
+```
+--
+{# Correct address #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True, permission_to_continue=True)
+verify_quote = VerifyQuote()
+main = Main(lead_contact=lead_contact, verify_quote=verify_quote)
+```
+Agent Action:
+[
+    AskAgentAct(verify_quote, property_address, ...)
+]
+
+Last-turn Conversation:
+Agent: I have your property at 123 Oak Lane. Is that address correct?
+User: the address is actually 548 Bradbury St
+
+User Target:
+```
+main.verify_quote.property_address = "548 Bradbury St"
+```
+--
+{# Verification complete — also initializes underwriting_intake #}
+State:
+```
+lead_contact = LeadContact(is_right_person=True, identity_confirmed=True, permission_to_continue=True)
+verify_quote = VerifyQuote(property_address="123 Oak Lane", property_type="single-family home", coverage_start="July 1st")
+main = Main(lead_contact=lead_contact, verify_quote=verify_quote)
+```
+Agent Action:
+[
+    AskForFieldConfirmation(verify_quote, coverage_start, ...)
+]
+
+Last-turn Conversation:
+Agent: Does everything on the quote look correct now?
+User: yes, everything looks good
+
+User Target:
+```
+main.verify_quote.coverage_start = confirm("July 1st")
+main.underwriting_intake = UnderwritingIntake()
+```
+--
+{# Roof age #}
+State:
+```
+underwriting_intake = UnderwritingIntake()
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=underwriting_intake)
+```
+Agent Action:
+[
+    AskAgentAct(underwriting_intake, roof_age_years, ...)
+]
+
+Last-turn Conversation:
+Agent: About how old is your roof?
+User: the roof is about 12 years old
+
+User Target:
+```
+main.underwriting_intake.roof_age_years = "12"
+```
+--
+{# Claims - none #}
+State:
+```
+underwriting_intake = UnderwritingIntake(roof_age_years="12")
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=underwriting_intake)
+```
+Agent Action:
+[
+    AskAgentAct(underwriting_intake, claims_past_five_years, ...)
+]
+
+Last-turn Conversation:
+Agent: Have there been any insurance claims on the property in the past five years?
+User: no, no claims at all
+
+User Target:
+```
+main.underwriting_intake.claims_past_five_years = "none"
+```
+--
+{# Claims - short negative variant #}
+State:
+```
+underwriting_intake = UnderwritingIntake(roof_age_years="12")
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=underwriting_intake)
+```
+Agent Action:
+[
+    AskAgentAct(underwriting_intake, claims_past_five_years, ...)
+]
+
+Last-turn Conversation:
+Agent: Have there been any insurance claims on the property in the past five years?
+User: nope
+
+User Target:
+```
+main.underwriting_intake.claims_past_five_years = "none"
+```
+--
+{# Underwriting intake complete after field confirmation — initializes schedule_consultation #}
+State:
+```
+underwriting_intake = UnderwritingIntake(roof_age_years="12", claims_past_five_years="none")
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=underwriting_intake)
+```
+Agent Action:
+[
+    AskForFieldConfirmation(underwriting_intake, claims_past_five_years, ...)
+]
+
+Last-turn Conversation:
+Agent: Just to confirm, there have been no insurance claims on the property in the past five years, correct?
+User: yes, that's correct
+
+User Target:
+```
+main.underwriting_intake.claims_past_five_years = confirm("none")
+main.schedule_consultation = ScheduleConsultation()
+```
+--
+{# Interested in consultation #}
+State:
+```
+schedule_consultation = ScheduleConsultation()
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=..., schedule_consultation=schedule_consultation)
+```
+Agent Action:
+[
+    AskAgentAct(schedule_consultation, interested_in_consultation, ...)
+]
+
+Last-turn Conversation:
+Agent: Would you like to schedule a phone consultation with a licensed agent?
+User: yes I'd like to talk to someone about a policy
+
+User Target:
+```
+main.schedule_consultation.interested_in_consultation = True
+```
+--
+{# Not interested #}
+State:
+```
+schedule_consultation = ScheduleConsultation()
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=..., schedule_consultation=schedule_consultation)
+```
+Agent Action:
+[
+    AskAgentAct(schedule_consultation, interested_in_consultation, ...)
+]
+
+Last-turn Conversation:
+Agent: Would you like to schedule a consultation?
+User: no thanks, I'll think about it
+
+User Target:
+```
+main.schedule_consultation.interested_in_consultation = False
+```
+--
+{# Time preference #}
+State:
+```
+schedule_consultation = ScheduleConsultation(interested_in_consultation=True)
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=..., schedule_consultation=schedule_consultation)
+```
+Agent Action:
+[
+    AskAgentAct(schedule_consultation, time_preference, ...)
+]
+
+Last-turn Conversation:
+Agent: Do you have a preference for morning or afternoon?
+User: mornings work best
+
+User Target:
+```
+main.schedule_consultation.time_preference = "morning"
+```
+--
+{# Select slot #}
+State:
+```
+schedule_consultation = ScheduleConsultation(interested_in_consultation=True, time_preference="morning")
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=..., schedule_consultation=schedule_consultation)
+```
+Agent Action:
+[
+    AskAgentAct(schedule_consultation, selected_slot, ...)
+]
+
+Last-turn Conversation:
+Agent: I have Friday at 10 AM with James Rivera available. Would that work?
+User: Thursday at two works best
+
+User Target:
+```
+main.schedule_consultation.selected_slot = "Thursday 2:00 PM with James Rivera"
+```
+--
+{# Booking confirmed #}
+State:
+```
+schedule_consultation = ScheduleConsultation(interested_in_consultation=True, selected_slot="Thursday 2:00 PM with James Rivera")
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=..., schedule_consultation=schedule_consultation)
+```
+Agent Action:
+[
+    AskAgentAct(schedule_consultation, booking_confirmed, ...)
+]
+
+Last-turn Conversation:
+Agent: Should I go ahead and book Thursday at 2 PM with James Rivera?
+User: yes, book that one
+
+User Target:
+```
+main.schedule_consultation.booking_confirmed = True
+```
+--
+{# Final review — no changes needed #}
+State:
+```
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=..., schedule_consultation=ScheduleConsultation(interested_in_consultation=True, selected_slot="Thursday 2:00 PM with James Rivera", booking_confirmed=True))
+```
+Agent Action:
+[
+    AskAgentAct(main, final_confirm, ...)
+]
+
+Last-turn Conversation:
+Agent: Are there any other details you'd like to add or change? If not, I'll wrap things up.
+User: no, that's everything
+
+User Target:
+```
+main.final_confirm = True
+```
+--
+{# Final review — user wants to change something #}
+State:
+```
+main = Main(lead_contact=..., verify_quote=..., underwriting_intake=..., schedule_consultation=ScheduleConsultation(interested_in_consultation=True, selected_slot="Thursday 2:00 PM with James Rivera", booking_confirmed=True))
+```
+Agent Action:
+[
+    AskAgentAct(main, final_confirm, ...)
+]
+
+Last-turn Conversation:
+Agent: Are there any other details you'd like to add or change? If not, I'll wrap things up.
+User: actually yes, I'd like to change the coverage start date
+
+User Target:
+```
+main.final_confirm = False
+```
+--
+{# General question about insurance process #}
+State:
+```
+main = Main()
+```
+Agent Action: None
+
+Last-turn Conversation:
+Agent: Hello, this is an automated assistant calling on behalf of Prestige Home Insurance.
+User: what is the process for getting a homeowners policy?
+
+User Target:
+```
+answer(insurance_general_info, "what is the process for getting a homeowners insurance policy?")
+```
+--
+<|endofinstruction|>
+
+<|startofinput|>
+State:
+```
+{{ state }}
+```
+Agent Action:
+```
+{{ agent_actions }}
+```
+
+Last-turn Conversation:
+Agent: {{ agent_utterance }}
+User: {{ user_utterance }}
+
+User Target:
+<|endofinput|>

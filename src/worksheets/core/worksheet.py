@@ -222,7 +222,11 @@ class GenieWorksheet(metaclass=GenieREPR):
                     if not params["optional"] and params["value"] == "NA":
                         params["value"] = None
 
-                setattr(self, attr_name, GenieField(**params))
+                field_instance = GenieField(**params)
+                # Rebind field parent to this worksheet instance so field actions
+                # execute against live per-conversation state (not class state).
+                field_instance.parent = self
+                setattr(self, attr_name, field_instance)
 
     def perform_action(self, bot: Any, local_context: Any) -> list:
         """Perform the action associated with this worksheet.

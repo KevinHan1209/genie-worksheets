@@ -1,0 +1,48 @@
+CREATE TABLE insurance_leads (
+    lead_id SERIAL PRIMARY KEY,
+    target_name TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
+    status TEXT NOT NULL DEFAULT 'new',
+    do_not_call BOOLEAN NOT NULL DEFAULT FALSE,
+    callback_time_text TEXT
+);
+
+CREATE TABLE insurance_quotes (
+    quote_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL REFERENCES insurance_leads(lead_id),
+    property_address TEXT,
+    property_type TEXT,
+    coverage_start TEXT,
+    estimated_premium TEXT
+);
+
+CREATE TABLE insurance_underwriting (
+    underwriting_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL REFERENCES insurance_leads(lead_id),
+    roof_age_years TEXT,
+    claims_past_five_years TEXT,
+    claims_details TEXT,
+    disposition TEXT,
+    notes TEXT
+);
+
+CREATE TABLE insurance_appointments (
+    appointment_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL,
+    slot_datetime_text TEXT,
+    agent_name TEXT,
+    booking_status TEXT NOT NULL DEFAULT 'pending'
+);
+
+CREATE TABLE insurance_call_log (
+    call_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL,
+    contact_outcome TEXT,
+    disposition TEXT,
+    interested_in_consultation BOOLEAN,
+    appointment_id INT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+insurance_general_info : FREE_TEXT;

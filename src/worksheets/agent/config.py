@@ -98,7 +98,4 @@ def get_all_agent_apis():
 
 
 if __name__ == "__main__":
-    config = Config.load_from_yaml(
-        "/home/harshit/genie-worksheets/experiments/domain_agents/course_enroll/config.yaml"
-    )
-    print(config)
+    print("Use Config.load_from_yaml('<path-to-config.yaml>') to load a model config.")

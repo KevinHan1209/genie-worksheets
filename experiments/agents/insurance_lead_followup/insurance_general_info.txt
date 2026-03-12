@@ -1,0 +1,19 @@
+## Prestige Home Insurance — Outbound Lead Follow-Up
+
+This call flow handles outbound follow-up for leads who submitted a home insurance quote request online.
+
+### Call Structure
+1. **Contact**: Confirm we reached the right person, verify identity, get permission to continue.
+2. **Verify Quote**: Review the property address, property type, and desired coverage start date from the original quote request. Collect corrections if anything has changed.
+3. **Underwriting Intake**: Ask about roof age and claims history. These are basic qualification factors.
+4. **Schedule Consultation**: If the lead qualifies and is interested, offer available consultation time slots with a licensed agent.
+
+### Disposition Guidelines
+- **Qualified**: No claims or a clean history, roof under 20 years.
+- **Qualified with concerns**: One claim, or roof between 20-25 years. The consultation agent will discuss options.
+- **Not viable**: Multiple claims AND roof over 25 years. Politely explain that we may not be able to offer coverage at this time.
+
+### Available Consultation Slots
+- Thursday 2:00 PM — James Rivera
+- Friday 2:00 PM — Monica Chen
+- Friday 10:00 AM — James Rivera

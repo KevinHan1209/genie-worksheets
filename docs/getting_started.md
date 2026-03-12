@@ -262,7 +262,7 @@ agent.
 You can copy basic annotated prompts from `experiments/sample_prompts/` 
 directory. Make changes where we have `TODO`. You need to provide a few 
 guidelines in the prompt that will help the LLM to perform better and some 
-examples. Please see `experiments/domain_agents/course_enroll/prompts/` for inspiration!
+examples. Please see `experiments/agents/insurance_lead_followup/prompts/` for inspiration!
 
 ### Spreadsheet Specification
 
@@ -289,10 +289,10 @@ You can run the agent in a web interface by running:
 
 **NOTE:** You should run the agent in the `frontend` directory to preserve the frontend assets.
 
-For restaurant agent:
+For insurance lead follow-up agent:
 ```bash
-cd experiments/domain_agents/yelpbot/frontend/
-chainlit run app_restaurant.py --port 8800
+cd experiments/agents/insurance_lead_followup/frontend/
+chainlit run app_insurance.py --port 8801
 ```
 
 Example agents are present in `experiments/agents/` directory. You can use them as a reference to create your own agents.

@@ -1,0 +1,411 @@
+[
+  {
+    "ws_predicate": null,
+    "ws_name": "Main",
+    "ws_type": "worksheet",
+    "ws_backend_api": "process_lead_outcome",
+    "ws_actions": null,
+    "fields": [
+      {
+        "field_name": "lead_id",
+        "field_predicate": null,
+        "field_kind": "internal",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Internal lead identifier",
+        "field_dont_ask": false,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "target_name",
+        "field_predicate": null,
+        "field_kind": "internal",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Name of the person we are calling",
+        "field_dont_ask": false,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "lead_contact",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "LeadContact",
+        "enum_values": null,
+        "field_description": "Confirm you reached the right person and whether they have a few minutes to review quote details before continuing",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "call_should_proceed",
+        "field_predicate": null,
+        "field_kind": "internal",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Whether the lead contact phase determined we should proceed (set by parser when permission is granted)",
+        "field_dont_ask": false,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "verify_quote",
+        "field_predicate": "self.lead_contact.permission_to_continue == True",
+        "field_kind": "input",
+        "field_type": "VerifyQuote",
+        "enum_values": null,
+        "field_description": "Can I quickly verify the quote details I have on file with you?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": "@hydrate_verify_quote(self.verify_quote, self.lead_id)"
+      },
+      {
+        "field_name": "verification_done",
+        "field_predicate": null,
+        "field_kind": "internal",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Whether quote verification is complete",
+        "field_dont_ask": true,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "underwriting_intake",
+        "field_predicate": "self.verify_quote is not None and self.verify_quote.property_address.confirmed == True and self.verify_quote.property_type.confirmed == True and self.verify_quote.coverage_start.confirmed == True",
+        "field_kind": "input",
+        "field_type": "UnderwritingIntake",
+        "enum_values": null,
+        "field_description": "Great, to continue, about how old is your roof?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "intake_done",
+        "field_predicate": null,
+        "field_kind": "internal",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Whether underwriting intake required fields are complete and confirmed",
+        "field_dont_ask": true,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "schedule_consultation",
+        "field_predicate": "self.underwriting_intake is not None and self.underwriting_intake.roof_age_years.confirmed == True and self.underwriting_intake.claims_past_five_years.confirmed == True and (self.underwriting_intake.claims_past_five_years != 'one' and self.underwriting_intake.claims_past_five_years != 'multiple' or self.underwriting_intake.claims_details.confirmed == True)",
+        "field_kind": "input",
+        "field_type": "ScheduleConsultation",
+        "enum_values": null,
+        "field_description": "Would you like to schedule a quick phone consultation with a licensed agent?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "final_confirm",
+        "field_predicate": "self.lead_contact is not None and self.schedule_consultation is not None and (self.schedule_consultation.interested_in_consultation == False or self.schedule_consultation.booking_confirmed is not None)",
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Are there any other details you'd like to add or change? If so, please let me know. Otherwise I'll wrap things up.",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      }
+    ]
+  },
+  {
+    "ws_predicate": null,
+    "ws_name": "LeadContact",
+    "ws_type": "worksheet",
+    "ws_backend_api": null,
+    "ws_actions": null,
+    "fields": [
+      {
+        "field_name": "is_right_person",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Whether we reached the person who submitted the quote request",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "identity_confirmed",
+        "field_predicate": "self.is_right_person == True",
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "The person confirmed they are the quote requester",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "permission_to_continue",
+        "field_predicate": "self.identity_confirmed == True",
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Say: 'I'm not a licensed insurance agent, but I would like to verify a few details from your quote and see if you'd like to schedule a call with a licensed agent. Do you have a few minutes?' and capture whether they agree",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "callback_requested",
+        "field_predicate": "self.identity_confirmed == True and self.permission_to_continue == False",
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "The person requests a callback at a different time",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "callback_time_text",
+        "field_predicate": "self.callback_requested == True",
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Preferred time for the callback (e.g. 'this afternoon', 'tomorrow morning')",
+        "field_dont_ask": false,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "do_not_call",
+        "field_predicate": "self.identity_confirmed == True and self.permission_to_continue == False and not self.callback_requested == True",
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "The person requests to be placed on the do-not-call list",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "wrong_person_notes",
+        "field_predicate": "not self.is_right_person == True",
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Notes about the wrong-person contact (e.g. who answered, any forwarding info)",
+        "field_dont_ask": false,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      }
+    ]
+  },
+  {
+    "ws_predicate": null,
+    "ws_name": "VerifyQuote",
+    "ws_type": "worksheet",
+    "ws_backend_api": null,
+    "ws_actions": null,
+    "fields": [
+      {
+        "field_name": "property_address",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "What is the property address for this quote?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": true,
+        "field_actions": null
+      },
+      {
+        "field_name": "property_type",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "What is the property type for this quote (for example, single-family home, condo, townhouse)?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": true,
+        "field_actions": null
+      },
+      {
+        "field_name": "coverage_start",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "What is the requested coverage start date for this quote?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": true,
+        "field_actions": null
+      },
+      {
+        "field_name": "target_name",
+        "field_predicate": null,
+        "field_kind": "internal",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Lead name associated with the quote record",
+        "field_dont_ask": true,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      }
+    ]
+  },
+  {
+    "ws_predicate": null,
+    "ws_name": "UnderwritingIntake",
+    "ws_type": "worksheet",
+    "ws_backend_api": null,
+    "ws_actions": null,
+    "fields": [
+      {
+        "field_name": "roof_age_years",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Do you happen to know the approximate age of your roof?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "claims_past_five_years",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Have there been any insurance claims on the property in the past five years?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "claims_details",
+        "field_predicate": "self.claims_past_five_years == 'one' or self.claims_past_five_years == 'multiple'",
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Brief description of past claims (type, approximate amount)",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "notes",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Any additional notes from the underwriting conversation",
+        "field_dont_ask": true,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "disposition",
+        "field_predicate": null,
+        "field_kind": "internal",
+        "field_type": "str",
+        "enum_values": [
+          {"value": "qualified", "description": "Lead is qualified for a standard policy"},
+          {"value": "qualified_with_concerns", "description": "Lead is qualified but has risk factors to discuss"},
+          {"value": "not_viable", "description": "Lead does not meet underwriting criteria"}
+        ],
+        "field_description": "Underwriting disposition computed from intake data",
+        "field_dont_ask": true,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      }
+    ]
+  },
+  {
+    "ws_predicate": null,
+    "ws_name": "ScheduleConsultation",
+    "ws_type": "worksheet",
+    "ws_backend_api": null,
+    "ws_actions": null,
+    "fields": [
+      {
+        "field_name": "interested_in_consultation",
+        "field_predicate": null,
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Ask whether they are interested in scheduling a phone consultation with a licensed agent",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "time_preference",
+        "field_predicate": "self.interested_in_consultation == True",
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "Do you have a preference for morning or afternoon for the consultation?",
+        "field_dont_ask": false,
+        "field_required": false,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "selected_slot",
+        "field_predicate": "self.interested_in_consultation == True",
+        "field_kind": "input",
+        "field_type": "str",
+        "enum_values": null,
+        "field_description": "I can offer available consultation slots. Which time works best for you?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      },
+      {
+        "field_name": "booking_confirmed",
+        "field_predicate": "self.interested_in_consultation == True",
+        "field_kind": "input",
+        "field_type": "bool",
+        "enum_values": null,
+        "field_description": "Should I go ahead and book that consultation slot for you?",
+        "field_dont_ask": false,
+        "field_required": true,
+        "field_confirm": null,
+        "field_actions": null
+      }
+    ]
+  }
+]

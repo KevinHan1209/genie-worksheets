@@ -12,7 +12,12 @@ from worksheets.core import (
     GenieRuntime,
     GenieValue,
 )
-from worksheets.core.agent_acts import AgentAct, AskAgentAct, AskForConfirmationAgentAct
+from worksheets.core.agent_acts import (
+    AgentAct,
+    AskAgentAct,
+    AskForConfirmationAgentAct,
+    ReportAgentAct,
+)
 from worksheets.core.worksheet import Answer, GenieType, GenieWorksheet
 from worksheets.utils.field import get_genie_fields_from_ws
 from worksheets.utils.logging_config import (
@@ -498,12 +503,13 @@ class QuestionPolicyManager:
 
     @staticmethod
     def ask_confirmation_policy(
-        obj: GenieWorksheet, local_context: GenieContext
+        obj: GenieWorksheet, bot: GenieRuntime, local_context: GenieContext
     ) -> List[AgentAct]:
         """Determine which fields need confirmation.
 
         Args:
             obj (GenieWorksheet): The worksheet object.
+            bot (GenieRuntime): The bot instance.
             local_context (GenieContext): The local context.
 
         Returns:
@@ -513,6 +519,16 @@ class QuestionPolicyManager:
             f"Starting confirmation policy for worksheet: {obj.__class__.__name__}"
         )
         log_worksheet_state(obj)
+
+        # If the previous system turn asked to confirm a field and the current turn
+        # cleared that same field (for example, user said "no"), prioritize re-asking
+        # the field value before asking to confirm any subsequent fields.
+        if QuestionPolicyManager._has_pending_rejected_confirmation(obj, bot):
+            logger.debug(
+                "Detected rejected confirmation with missing replacement value; "
+                "skipping confirmation asks this turn."
+            )
+            return []
 
         ask_for_confirmation = []
 
@@ -524,15 +540,23 @@ class QuestionPolicyManager:
                 logger.debug(
                     f"Checking field: {field.name}, requires_confirmation={field.requires_confirmation}, confirmed={field.confirmed}"
                 )
+                if field.value is None:
+                    continue
+
+                if isinstance(field.value, (GenieWorksheet, GenieType)):
+                    check_for_confirmation(field.value)
+                    if ask_for_confirmation:
+                        return
+                    continue
+
                 if (
-                    field.value is not None
-                    and field.requires_confirmation
+                    field.requires_confirmation
                     and not field.confirmed
+                    and QuestionPolicyManager._field_value_has_info(field.value)
                 ):
                     logger.debug(f"Field {field.name} needs confirmation")
-                    QuestionPolicyManager._handle_field_confirmation(
-                        field, obj, ask_for_confirmation
-                    )
+                    ask_for_confirmation.append({"ws": obj, "field": field})
+                    return
 
         check_for_confirmation(obj)
 
@@ -552,6 +576,47 @@ class QuestionPolicyManager:
 
         logger.debug("No fields need confirmation")
         return []
+
+    @staticmethod
+    def _has_pending_rejected_confirmation(
+        obj: GenieWorksheet, bot: GenieRuntime
+    ) -> bool:
+        """Return True when the last turn asked for confirmation on a field and
+        that field is now empty, indicating the user rejected the value.
+        """
+        recently_confirmed_field_names: set[str] = set()
+        try:
+            dlg = getattr(getattr(bot, "agent", None), "dlg_history", None)
+            if dlg and len(dlg) > 0:
+                last_sys = dlg[-1].system_action
+                if last_sys is not None:
+                    for act in last_sys.actions:
+                        if isinstance(act, AskForConfirmationAgentAct):
+                            recently_confirmed_field_names.add(act.field.name)
+        except (AttributeError, IndexError):
+            return False
+
+        if not recently_confirmed_field_names:
+            return False
+
+        def _check(ws: GenieWorksheet) -> bool:
+            for field in get_genie_fields_from_ws(ws):
+                if isinstance(field.value, (GenieWorksheet, GenieType)) and _check(
+                    field.value
+                ):
+                    return True
+
+                if (
+                    field.name in recently_confirmed_field_names
+                    and field.requires_confirmation
+                    and field.ask
+                    and not field.internal
+                    and field.value is None
+                ):
+                    return True
+            return False
+
+        return _check(obj)
 
     @staticmethod
     def _handle_no_open_worksheet(
@@ -622,54 +687,68 @@ class QuestionPolicyManager:
                 or field.slottype.__bases__ == (GenieWorksheet,)
             ):
                 logger.debug(f"Field {field.name} has special slot type")
-                if field.value is not None and field.value not in already_checked:
+                nested_obj = field.value
+
+                # If a nested worksheet slot is unset, inspect its schema to find the
+                # first askable leaf field instead of asking users about the container.
+                if (
+                    nested_obj is None
+                    and inspect.isclass(field.slottype)
+                    and issubclass(field.slottype, GenieWorksheet)
+                ):
+                    logger.debug(
+                        f"Materializing nested worksheet field {field.name} as {field.slottype.__name__}"
+                    )
+                    nested_obj = field.slottype()
+                    field.value = nested_obj
+
+                    # Run field-level actions (e.g. hydration) immediately after materialization.
+                    if (
+                        field.actions is not None
+                        and len(field.actions) > 0
+                        and not field.action_performed
+                    ):
+                        logger.debug(
+                            f"Running field action after materialization for {field.name}"
+                        )
+                        field.perform_action(bot, local_context)
+                        nested_obj = field.value
+
+                    # Fallback hydrator path: if a domain API named
+                    # `hydrate_<field_name>` exists, invoke it directly after
+                    # materialization. This avoids relying solely on action-code
+                    # execution when the parser skipped explicit initialization.
+                    hydrate_fn = bot.context.context.get(f"hydrate_{field.name}")
+                    if callable(hydrate_fn):
+                        lead_id_field = getattr(obj, "lead_id", None)
+                        lead_id_value = (
+                            getattr(lead_id_field, "value", lead_id_field)
+                            if lead_id_field is not None
+                            else None
+                        )
+                        try:
+                            hydrate_fn(nested_obj, lead_id_value)
+                        except TypeError:
+                            hydrate_fn(nested_obj)
+
+                if nested_obj is not None and nested_obj not in already_checked:
                     logger.debug(f"Checking nested value in field {field.name}")
-                    already_checked.append(field.value)
+                    already_checked.append(nested_obj)
                     QuestionPolicyManager._check_worksheet_fields(
-                        field.value,
+                        nested_obj,
                         obj_name,
                         fields_to_ask,
                         already_checked,
                         local_context,
                         bot,
                     )
-                else:
-                    logger.debug(f"Adding field {field.name} to questions list")
-                    fields_to_ask.append(
-                        {"ws": obj, "field": field, "ws_name": obj_name}
-                    )
-                    return
+                    if fields_to_ask:
+                        return
+                    continue
 
             if field.value is None and not field.internal and field.ask:
                 logger.debug(f"Field {field.name} needs to be asked")
                 fields_to_ask.append({"ws": obj, "field": field, "ws_name": obj_name})
-
-    @staticmethod
-    def _handle_field_confirmation(
-        field: GenieField, obj: GenieWorksheet, ask_for_confirmation: List[Dict]
-    ) -> None:
-        """Handle confirmation requirements for a field.
-
-        Args:
-            field (GenieField): The field to check.
-            obj (GenieWorksheet): The worksheet containing the field.
-            ask_for_confirmation (List[Dict]): List to store fields needing confirmation.
-        """
-        logger.debug(f"Handling confirmation for field: {field.name}")
-
-        if isinstance(field.value, GenieType):
-            logger.debug(f"Field {field.name} is a GenieType, needs confirmation")
-            ask_for_confirmation.append({"ws": obj, "field": field})
-        elif isinstance(field.value, GenieWorksheet):
-            logger.debug(
-                f"Field {field.name} contains a worksheet, checking nested confirmation"
-            )
-            QuestionPolicyManager._handle_field_confirmation(
-                field.value, obj, ask_for_confirmation
-            )
-        elif QuestionPolicyManager._field_value_has_info(field.value):
-            logger.debug(f"Field {field.name} has info, needs confirmation")
-            ask_for_confirmation.append({"ws": obj, "field": field})
 
     @staticmethod
     def _field_value_has_info(value: Any) -> bool:
@@ -690,6 +769,78 @@ class QuestionPolicyManager:
             return has_info
 
         return True
+
+    @staticmethod
+    def auto_confirm_answered_fields(
+        obj: GenieWorksheet,
+        bot: GenieRuntime,
+        local_context: GenieContext,
+    ) -> List[AgentAct]:
+        """Auto-confirm requires_confirmation fields that were just populated
+        in direct response to an AskAgentAct (i.e. the field was empty and the
+        user supplied the value).  Returns ReportAgentActs acknowledging each
+        recorded value, plus any field/worksheet actions that become runnable
+        because of the newly confirmed state.
+        """
+        prev_asked_field_names: set = set()
+        try:
+            dlg = getattr(getattr(bot, "agent", None), "dlg_history", None)
+            if dlg and len(dlg) > 0:
+                last_sys = dlg[-1].system_action
+                if last_sys is not None:
+                    for act in last_sys.actions:
+                        if isinstance(act, AskAgentAct):
+                            prev_asked_field_names.add(act.field.name)
+        except (AttributeError, IndexError):
+            pass
+
+        if not prev_asked_field_names:
+            return []
+
+        acts: List[AgentAct] = []
+        confirmed_worksheets: List[GenieWorksheet] = []
+
+        def _check(ws: GenieWorksheet) -> None:
+            for field in get_genie_fields_from_ws(ws):
+                if (
+                    field.value is not None
+                    and field.requires_confirmation
+                    and not field.confirmed
+                    and field.name in prev_asked_field_names
+                ):
+                    if isinstance(field._value, GenieValue):
+                        field._value.confirmed = True
+                    else:
+                        field._confirmed = True
+                    logger.info(
+                        f"Auto-confirmed field {field.name} = {field.value} "
+                        f"(answered directly via AskAgentAct)"
+                    )
+                    acts.append(
+                        ReportAgentAct(
+                            None,
+                            f"Recorded {field.name}: {field.value}",
+                        )
+                    )
+                    if ws not in confirmed_worksheets:
+                        confirmed_worksheets.append(ws)
+
+                if isinstance(field.value, (GenieWorksheet, GenieType)):
+                    _check(field.value)
+
+        _check(obj)
+
+        for ws in confirmed_worksheets:
+            field_acts = ActionPolicyExecutor.perform_field_actions(
+                ws, bot, local_context
+            )
+            acts.extend(field_acts)
+            ws_acts = ActionPolicyExecutor.perform_worksheet_actions(
+                ws, bot, local_context
+            )
+            acts.extend(ws_acts)
+
+        return acts
 
 
 class AgentPolicyManager:
@@ -759,6 +910,127 @@ class AgentPolicyManager:
         logger.info("Agent policy execution completed")
         log_context(self.bot.context.context, "DEBUG")
 
+    def _was_permission_prompted_last_turn(self) -> bool:
+        """Return True if the previous system action explicitly asked for
+        `permission_to_continue`.
+        """
+        try:
+            dlg = getattr(getattr(self.bot, "agent", None), "dlg_history", None)
+            if not dlg or len(dlg) == 0:
+                return False
+            last_sys = dlg[-1].system_action
+            if last_sys is None:
+                return False
+            for act in last_sys.actions:
+                if (
+                    isinstance(act, AskAgentAct)
+                    and getattr(getattr(act, "field", None), "name", None)
+                    == "permission_to_continue"
+                ):
+                    return True
+        except (AttributeError, IndexError):
+            return False
+        return False
+
+    @staticmethod
+    def _get_field_value(field_or_value: Any) -> Any:
+        if hasattr(field_or_value, "value"):
+            return field_or_value.value
+        return field_or_value
+
+    @staticmethod
+    def _set_field_value(field_or_value: Any, value: Any) -> None:
+        if hasattr(field_or_value, "value"):
+            field_or_value.value = value
+
+    def _revert_unauthorized_permission_assignments(
+        self, original_global_context: Dict
+    ) -> None:
+        """Guardrail: only allow setting permission_to_continue when the prior
+        system action asked for that field.
+        """
+        if self._was_permission_prompted_last_turn():
+            return
+
+        for key, current_obj in self.bot.context.context.items():
+            if key == "__builtins__":
+                continue
+
+            original_obj = original_global_context.get(key)
+
+            # Direct LeadContact-like objects in context
+            if hasattr(current_obj, "permission_to_continue"):
+                current_perm_field = getattr(current_obj, "permission_to_continue")
+                current_perm_value = self._get_field_value(current_perm_field)
+
+                original_perm_value = None
+                if original_obj is not None and hasattr(
+                    original_obj, "permission_to_continue"
+                ):
+                    original_perm_value = self._get_field_value(
+                        getattr(original_obj, "permission_to_continue")
+                    )
+
+                if current_perm_value is True and original_perm_value is not True:
+                    logger.debug(
+                        f"Reverting unauthorized permission_to_continue=True on {key}"
+                    )
+                    self._set_field_value(current_perm_field, original_perm_value)
+
+            # Main-like objects that nest lead_contact and verify_quote
+            if not hasattr(current_obj, "lead_contact"):
+                continue
+
+            current_lead_contact_field = getattr(current_obj, "lead_contact")
+            current_lead_contact = self._get_field_value(current_lead_contact_field)
+            if current_lead_contact is None or not hasattr(
+                current_lead_contact, "permission_to_continue"
+            ):
+                continue
+
+            original_lead_contact = None
+            if original_obj is not None and hasattr(original_obj, "lead_contact"):
+                original_lead_contact = self._get_field_value(
+                    getattr(original_obj, "lead_contact")
+                )
+
+            current_perm_field = getattr(current_lead_contact, "permission_to_continue")
+            current_perm_value = self._get_field_value(current_perm_field)
+
+            original_perm_value = None
+            if original_lead_contact is not None and hasattr(
+                original_lead_contact, "permission_to_continue"
+            ):
+                original_perm_value = self._get_field_value(
+                    getattr(original_lead_contact, "permission_to_continue")
+                )
+
+            if current_perm_value is True and original_perm_value is not True:
+                logger.debug(
+                    f"Reverting unauthorized nested permission_to_continue=True on {key}.lead_contact"
+                )
+                self._set_field_value(current_perm_field, original_perm_value)
+
+                # Also prevent accidental phase advancement caused by unauthorized
+                # permission assignment in the same turn.
+                if hasattr(current_obj, "verify_quote"):
+                    current_verify_quote_field = getattr(current_obj, "verify_quote")
+                    current_verify_quote = self._get_field_value(
+                        current_verify_quote_field
+                    )
+
+                    original_verify_quote = None
+                    if original_obj is not None and hasattr(original_obj, "verify_quote"):
+                        original_verify_quote = self._get_field_value(
+                            getattr(original_obj, "verify_quote")
+                        )
+
+                    if current_verify_quote is not None and original_verify_quote is None:
+                        logger.debug(
+                            f"Reverting unauthorized verify_quote initialization on {key}"
+                        )
+                        self._set_field_value(current_verify_quote_field, None)
+
     def _execute_and_generate_policy(
         self,
         code_lines: List[str],
@@ -784,6 +1056,7 @@ class AgentPolicyManager:
             logger.debug(f"Processing code line {i + 1}/{len(code_lines)}: {code_line}")
             local_context = GenieContext()
             self.bot.execute(code_line, local_context, sp=True)
+            self._revert_unauthorized_permission_assignments(original_global_context)
 
             # Get context differences and update local context
             logger.debug("Computing context differences")
@@ -927,9 +1200,20 @@ class AgentPolicyManager:
                 self.bot.order_of_actions.append(var_name)
 
                 if self.bot.context.agent_acts.can_have_other_acts():
+                    logger.debug(f"Auto-confirming answered fields for {var_name}")
+                    auto_acts = self.question_manager.auto_confirm_answered_fields(
+                        obj, self.bot, context
+                    )
+                    if auto_acts:
+                        logger.debug(
+                            f"Auto-confirm produced {len(auto_acts)} acts for {var_name}"
+                        )
+                        self.bot.context.agent_acts.extend(auto_acts)
+
+                if self.bot.context.agent_acts.can_have_other_acts():
                     logger.debug(f"Checking confirmation policy for {var_name}")
                     actions = self.question_manager.ask_confirmation_policy(
-                        obj, context
+                        obj, self.bot, context
                     )
                     if actions:
                         logger.debug(f"Adding {len(actions)} confirmation actions")
@@ -984,9 +1268,20 @@ class AgentPolicyManager:
                 continue
 
             if self.bot.context.agent_acts.can_have_other_acts():
+                logger.debug(f"Auto-confirming answered fields for {var_name} (ordered)")
+                auto_acts = self.question_manager.auto_confirm_answered_fields(
+                    obj, self.bot, self.bot.context
+                )
+                if auto_acts:
+                    logger.debug(
+                        f"Auto-confirm produced {len(auto_acts)} acts for {var_name}"
+                    )
+                    self.bot.context.agent_acts.extend(auto_acts)
+
+            if self.bot.context.agent_acts.can_have_other_acts():
                 logger.debug(f"Checking confirmation policy for {var_name}")
                 actions = self.question_manager.ask_confirmation_policy(
-                    obj, self.bot.context
+                    obj, self.bot, self.bot.context
                 )
                 if actions:
                     logger.debug(f"Adding {len(actions)} confirmation actions")

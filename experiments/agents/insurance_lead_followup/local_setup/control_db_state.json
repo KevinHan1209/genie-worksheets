@@ -1,0 +1,34 @@
+{
+  "lead_id": 1,
+  "captured_at": "2026-03-12T11:24:58.927951",
+  "insurance_leads": {
+    "lead_id": 1,
+    "target_name": "Kevin",
+    "phone": "(555) 867-5309",
+    "email": "alex.mitchell@example.com",
+    "status": "new",
+    "do_not_call": false,
+    "callback_time_text": null
+  },
+  "insurance_quotes": [
+    {
+      "quote_id": 1,
+      "lead_id": 1,
+      "property_address": "742 Evergreen Terrace, Springfield, IL",
+      "property_type": "single-family home",
+      "coverage_start": "April 15",
+      "estimated_premium": null
+    }
+  ],
+  "insurance_underwriting": [
+    {
+      "underwriting_id": 1,
+      "lead_id": 1,
+      "roof_age_years": null,
+      "claims_past_five_years": null,
+      "claims_details": null,
+      "disposition": null,
+      "notes": null
+    }
+  ]
+}

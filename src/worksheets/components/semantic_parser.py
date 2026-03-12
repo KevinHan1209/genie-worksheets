@@ -507,12 +507,187 @@ class GenieParser:
         else:
             user_target = current_dlg_turn.user_target_sp
 
+        user_target = self._normalize_confirm_slot_assignments(user_target)
+        user_target = self._normalize_bool_confirm_assignments(
+            user_target, current_dlg_turn.user_utterance
+        )
+
         answer_queries, pattern_type = self._extract_answer_queries(user_target)
         suql_queries, user_target = await self.knowledge_parser.process_answer_queries(
             answer_queries, dlg_history, user_target, pattern_type
         )
 
         return user_target.strip(), suql_queries
+
+    def _normalize_confirm_slot_assignments(self, user_target: str) -> str:
+        """Normalize invalid confirm-slot assignments emitted by the parser.
+
+        For fields with slottype=="confirm", expressions like
+        `main.confirm_submission = confirm(main.confirm_submission)` keep the value
+        as None and can cause confirmation loops. For these fields, a user "yes"
+        should be represented as a direct boolean assignment.
+        """
+        if not user_target:
+            return user_target
+
+        confirm_slot_fields = set()
+        for ws in self.runtime.genie_worksheets:
+            for field in get_genie_fields_from_ws(ws):
+                if field.slottype == "confirm":
+                    confirm_slot_fields.add(field.name)
+
+        if not confirm_slot_fields:
+            return user_target
+
+        normalized_lines: List[str] = []
+        assign_pattern = re.compile(
+            r"^(?P<indent>\s*)(?P<lhs>[A-Za-z_][A-Za-z0-9_\.]*)\s*=\s*(?P<rhs>.+?)\s*$"
+        )
+
+        for raw_line in user_target.splitlines():
+            m = assign_pattern.match(raw_line)
+            if not m:
+                normalized_lines.append(raw_line)
+                continue
+
+            lhs = m.group("lhs")
+            rhs = m.group("rhs").strip()
+            touched = False
+            for field_name in confirm_slot_fields:
+                if lhs == field_name or lhs.endswith(f".{field_name}"):
+                    if rhs.startswith("confirm("):
+                        normalized_lines.append(f"{m.group('indent')}{lhs} = True")
+                        touched = True
+                        break
+
+            if not touched:
+                normalized_lines.append(raw_line)
+
+        normalized = "\n".join(normalized_lines)
+
+        # Also normalize constructor kwargs, e.g. Main(confirm_submission=confirm(...))
+        for field_name in confirm_slot_fields:
+            normalized = re.sub(
+                rf"(\b{re.escape(field_name)}\s*=\s*)confirm\([^)]*\)",
+                r"\1True",
+                normalized,
+            )
+
+        return normalized
+
+    def _normalize_bool_confirm_assignments(
+        self, user_target: str, user_utterance: Optional[str]
+    ) -> str:
+        """Normalize invalid bool assignments emitted as confirm(...).
+
+        The parser can occasionally emit:
+          `some_bool_field = confirm(some_bool_field)`
+        for normal bool slots asked via AskField. That keeps the value unset and
+        causes repeated prompts. Convert those to direct booleans when the latest
+        user utterance is clearly affirmative/negative.
+        """
+        if not user_target:
+            return user_target
+
+        polarity = self._classify_binary_reply(user_utterance)
+        if polarity is None:
+            return user_target
+
+        bool_slot_fields = set()
+        confirm_slot_fields = set()
+        for ws in self.runtime.genie_worksheets:
+            for field in get_genie_fields_from_ws(ws):
+                if field.slottype == bool:
+                    bool_slot_fields.add(field.name)
+                elif field.slottype == "confirm":
+                    confirm_slot_fields.add(field.name)
+
+        if not bool_slot_fields:
+            return user_target
+
+        bool_literal = "True" if polarity else "False"
+        normalized_lines: List[str] = []
+        assign_pattern = re.compile(
+            r"^(?P<indent>\s*)(?P<lhs>[A-Za-z_][A-Za-z0-9_\.]*)\s*=\s*(?P<rhs>.+?)\s*$"
+        )
+
+        for raw_line in user_target.splitlines():
+            m = assign_pattern.match(raw_line)
+            if not m:
+                normalized_lines.append(raw_line)
+                continue
+
+            lhs = m.group("lhs")
+            rhs = m.group("rhs").strip()
+
+            field_name = lhs.split(".")[-1]
+            if (
+                field_name in bool_slot_fields
+                and field_name not in confirm_slot_fields
+                and rhs.startswith("confirm(")
+            ):
+                normalized_lines.append(f"{m.group('indent')}{lhs} = {bool_literal}")
+            else:
+                normalized_lines.append(raw_line)
+
+        normalized = "\n".join(normalized_lines)
+
+        for field_name in bool_slot_fields:
+            if field_name in confirm_slot_fields:
+                continue
+            normalized = re.sub(
+                rf"(\b{re.escape(field_name)}\s*=\s*)confirm\([^)]*\)",
+                rf"\1{bool_literal}",
+                normalized,
+            )
+
+        return normalized
+
+    @staticmethod
+    def _classify_binary_reply(user_utterance: Optional[str]) -> Optional[bool]:
+        """Return True/False for clear yes/no utterances, else None."""
+        if not user_utterance:
+            return None
+
+        text = user_utterance.strip().lower()
+        text = re.sub(r"[^a-z0-9\s']", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        affirmative = {
+            "yes",
+            "yeah",
+            "yep",
+            "yup",
+            "correct",
+            "right",
+            "sure",
+            "ok",
+            "okay",
+            "please do",
+            "book it",
+            "sounds good",
+        }
+        negative = {
+            "no",
+            "nope",
+            "nah",
+            "not now",
+            "don't",
+            "do not",
+            "not really",
+        }
+
+        if text in affirmative:
+            return True
+        if text in negative:
+            return False
+
+        if text.startswith("yes ") or text.startswith("yeah ") or text.startswith("yep "):
+            return True
+        if text.startswith("no ") or text.startswith("nope ") or text.startswith("nah "):
+            return False
+
+        return None
 
     @staticmethod
     def _extract_answer_queries(

@@ -1,7 +1,0 @@
-==> ROOT_DIR=/users/kevin-han/genie-worksheets
-==> Checking PostgreSQL at 127.0.0.1:5432
-ERROR: PostgreSQL is not reachable at 127.0.0.1:5432.
-
-Either:
-  1) start Postgres yourself, or
-  2) re-run with START_POSTGRES_DOCKER=1 (if docker is allowed).

@@ -186,7 +186,7 @@ notebooks/
 experiments/output/
 
 experiments/starv2_agents/runs/
-experiments/domain_agents/course_enroll/frontend/data/
+experiments/agents/insurance_lead_followup/frontend/user_conversation/
 course_assistant_bot_new.json
 course_assistant_bot_new_notworking.json
 

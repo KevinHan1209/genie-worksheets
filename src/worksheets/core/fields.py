@@ -334,12 +334,12 @@ class GenieField:
         """
         if self.action_performed:
             return []
-        logger.info(f"Peforming action for {self.name}: {self.actions.action}")
-        acts = []
-
         # If there are no actions, return an empty list
         if self.actions is None or len(self.actions) == 0:
-            return acts
+            return []
+
+        logger.info(f"Peforming action for {self.name}: {self.actions.action}")
+        acts = []
 
         # Perform the action
         acts = self.actions.perform(self, runtime, local_context)

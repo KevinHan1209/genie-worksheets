@@ -1,3 +1,0 @@
-Use `location = 'some place'` to search restaurants that are geographically close, don't use other operations on the location field.
-Use `'some string' = opening_hours` to search restaurants open at certain time, don't use other operations on the opening_hours field.
-To reference a specific restaurant, use `_id` or `id` field, do not use the name field.

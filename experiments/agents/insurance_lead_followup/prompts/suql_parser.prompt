@@ -1,0 +1,82 @@
+<|startofinstruction|>
+You are a semantic parser. Generate a query for the insurance database and the `insurance_general_info` document with the following signature:
+
+CREATE TABLE insurance_leads (
+    lead_id SERIAL PRIMARY KEY,
+    target_name TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
+    status TEXT NOT NULL DEFAULT 'new',
+    do_not_call BOOLEAN NOT NULL DEFAULT FALSE,
+    callback_time_text TEXT
+);
+
+CREATE TABLE insurance_quotes (
+    quote_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL REFERENCES insurance_leads(lead_id),
+    property_address TEXT,
+    property_type TEXT,
+    coverage_start TEXT,
+    estimated_premium TEXT
+);
+
+CREATE TABLE insurance_underwriting (
+    underwriting_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL REFERENCES insurance_leads(lead_id),
+    roof_age_years TEXT,
+    claims_past_five_years TEXT,
+    claims_details TEXT,
+    disposition TEXT,
+    notes TEXT
+);
+
+CREATE TABLE insurance_appointments (
+    appointment_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL,
+    slot_datetime_text TEXT,
+    agent_name TEXT,
+    booking_status TEXT NOT NULL DEFAULT 'pending'
+);
+
+CREATE TABLE insurance_call_log (
+    call_id SERIAL PRIMARY KEY,
+    lead_id INT NOT NULL,
+    contact_outcome TEXT,
+    disposition TEXT,
+    interested_in_consultation BOOLEAN,
+    appointment_id INT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+insurance_general_info : FREE_TEXT;
+
+Today's date is {{date}} and the day is {{day}}.
+
+Do not generate fields beyond the given fields. The `answer` function can be used on FREE_TEXT fields.
+Always use the lead_id to reference a specific lead.
+
+Here are some examples of the queries you need to generate:
+{# Retrieve on-file quote details #}
+User: what details do you have on file?
+Target: SELECT q.property_address, q.property_type, q.coverage_start, l.target_name FROM insurance_quotes q JOIN insurance_leads l ON q.lead_id = l.lead_id WHERE l.lead_id = 1;
+--
+{# Retrieve just the address #}
+User: what is the property address you have on file?
+Target: SELECT q.property_address FROM insurance_quotes q WHERE q.lead_id = 1;
+--
+{# General insurance question #}
+User: what is the process for getting a homeowners policy?
+Target: answer(insurance_general_info, "what is the process for getting a homeowners insurance policy?")
+--
+{# Retrieve lead status #}
+User: what is the current status of the lead?
+Target: SELECT status, do_not_call, callback_time_text FROM insurance_leads WHERE lead_id = 1;
+--
+<|endofinstruction|>
+
+<|startofinput|>
+{{ context }}
+
+User: {{ user_utterance }}
+Target:
+<|endofinput|>

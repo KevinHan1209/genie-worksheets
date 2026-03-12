@@ -1,1 +1,0 @@
-[{"user": "hi", "bot": null, "turn_context": "main = Main()\n", "global_context": "main = Main()\n", "system_action": ["AskField(main, courses_to_take, The courses that the student wants to take)"], "user_target_sp": null, "user_target": null, "user_target_suql": null}]
